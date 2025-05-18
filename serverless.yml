@@ -1,0 +1,82 @@
+service: cnj-processor-alt-v2
+
+provider:
+  name: aws
+  profile: cnj-profile
+  runtime: python3.12
+  region: us-east-1
+  environment:
+    DYNAMODB_TABLE: cnjtable
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+        - sqs:SendMessage
+      Resource: "*"
+
+functions:
+  apiHandler:
+    handler: interface/lambda_handler.lambda_handler
+    events:
+      - http:
+          path: process-cnj
+          method: post
+          cors: true
+  worker:
+    handler: interface/worker_lambda.lambda_handler
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - CnjQueue
+              - Arn
+
+resources:
+  Resources:
+    CnjQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: cnj-queue
+    cnjtable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: cnjtable
+        AttributeDefinitions:
+          - AttributeName: cnj
+            AttributeType: S
+        KeySchema:
+          - AttributeName: cnj
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+
+resources:
+  Resources:
+    CnjUserPool:
+      Type: AWS::Cognito::UserPool
+      Properties:
+        UserPoolName: cnj-user-pool
+        AutoVerifiedAttributes:
+          - email
+
+    CnjUserPoolClient:
+      Type: AWS::Cognito::UserPoolClient
+      Properties:
+        ClientName: cnj-client
+        UserPoolId:
+          Ref: CnjUserPool
+        GenerateSecret: false
+        ExplicitAuthFlows:
+          - ADMIN_NO_SRP_AUTH
+          - ALLOW_REFRESH_TOKEN_AUTH
+          - ALLOW_USER_PASSWORD_AUTH
+
+    ApiGatewayAuthorizer:
+      Type: AWS::ApiGateway::Authorizer
+      Properties:
+        Name: cognito-authorizer
+        Type: COGNITO_USER_POOLS
+        IdentitySource: method.request.header.Authorization
+        RestApiId:
+          Ref: ApiGatewayRestApi
+        ProviderARNs:
+          - Fn::GetAtt: [CnjUserPool, Arn]
