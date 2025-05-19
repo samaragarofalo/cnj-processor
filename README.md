@@ -35,7 +35,7 @@ A arquitetura foi implementada com os seguintes componentes:
 
 ```bash
 .
-├── application          # Regras de negócio (casos de uso)
+├── app                  # Regras de negócio (casos de uso)
 │   └── usecase.py
 ├── domain               # Entidades do domínio
 │   └── cnj.py
