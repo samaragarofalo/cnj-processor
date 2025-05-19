@@ -1,43 +1,143 @@
 {
   "service": {
-    "service": "cnj-processor-alt-v2",
+    "service": "cnj-processor",
     "serviceObject": {
-      "name": "cnj-processor-alt-v2"
+      "name": "cnj-processor"
     },
     "provider": {
       "name": "aws",
-      "profile": "cnj-profile",
-      "runtime": "python3.12",
-      "region": "us-east-1",
-      "environment": {
-        "DYNAMODB_TABLE": "cnjtable"
-      },
-      "iamRoleStatements": [
-        {
-          "Effect": "Allow",
-          "Action": [
-            "dynamodb:PutItem",
-            "sqs:SendMessage"
-          ],
-          "Resource": "*"
-        }
-      ],
+      "runtime": "python3.11",
       "stage": "dev",
+      "region": "us-east-1",
+      "profile": "cnj-profile",
+      "environment": {
+        "AUTH_TOKEN": "cDeh4bg9DxkMZuk5gPfDL2YuWFh2xUmPrUFoXiIrMSBcX24CG2K3bVmVfOqt57WD",
+        "DYNAMODB_TABLE": "cnj",
+        "QUEUE_URL": {
+          "Fn::GetAtt": [
+            "CnjQueue",
+            "QueueUrl"
+          ]
+        }
+      },
+      "iam": {
+        "role": {
+          "statements": [
+            {
+              "Effect": "Allow",
+              "Action": [
+                "sqs:SendMessage"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "CnjQueue",
+                    "Arn"
+                  ]
+                }
+              ]
+            },
+            {
+              "Effect": "Allow",
+              "Action": [
+                "dynamodb:PutItem"
+              ],
+              "Resource": [
+                {
+                  "Fn::GetAtt": [
+                    "CnjTable",
+                    "Arn"
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      },
       "versionFunctions": true,
       "compiledCloudFormationTemplate": {
         "AWSTemplateFormatVersion": "2010-09-09",
         "Description": "The AWS CloudFormation template for this Serverless application",
         "Resources": {
-          "ApiHandlerLogGroup": {
+          "ServerlessDeploymentBucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+              "BucketEncryption": {
+                "ServerSideEncryptionConfiguration": [
+                  {
+                    "ServerSideEncryptionByDefault": {
+                      "SSEAlgorithm": "AES256"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "ServerlessDeploymentBucketPolicy": {
+            "Type": "AWS::S3::BucketPolicy",
+            "Properties": {
+              "Bucket": {
+                "Ref": "ServerlessDeploymentBucket"
+              },
+              "PolicyDocument": {
+                "Statement": [
+                  {
+                    "Action": "s3:*",
+                    "Effect": "Deny",
+                    "Principal": "*",
+                    "Resource": [
+                      {
+                        "Fn::Join": [
+                          "",
+                          [
+                            "arn:",
+                            {
+                              "Ref": "AWS::Partition"
+                            },
+                            ":s3:::",
+                            {
+                              "Ref": "ServerlessDeploymentBucket"
+                            },
+                            "/*"
+                          ]
+                        ]
+                      },
+                      {
+                        "Fn::Join": [
+                          "",
+                          [
+                            "arn:",
+                            {
+                              "Ref": "AWS::Partition"
+                            },
+                            ":s3:::",
+                            {
+                              "Ref": "ServerlessDeploymentBucket"
+                            }
+                          ]
+                        ]
+                      }
+                    ],
+                    "Condition": {
+                      "Bool": {
+                        "aws:SecureTransport": false
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "ApiLogGroup": {
             "Type": "AWS::Logs::LogGroup",
             "Properties": {
-              "LogGroupName": "/aws/lambda/cnj-processor-alt-v2-dev-apiHandler"
+              "LogGroupName": "/aws/lambda/cnj-processor-dev-api"
             }
           },
           "WorkerLogGroup": {
             "Type": "AWS::Logs::LogGroup",
             "Properties": {
-              "LogGroupName": "/aws/lambda/cnj-processor-alt-v2-dev-worker"
+              "LogGroupName": "/aws/lambda/cnj-processor-dev-worker"
             }
           },
           "IamRoleLambdaExecution": {
@@ -65,7 +165,7 @@
                     "Fn::Join": [
                       "-",
                       [
-                        "cnj-processor-alt-v2",
+                        "cnj-processor",
                         "dev",
                         "lambda"
                       ]
@@ -83,7 +183,7 @@
                         ],
                         "Resource": [
                           {
-                            "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cnj-processor-alt-v2-dev*:*"
+                            "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cnj-processor-dev*:*"
                           }
                         ]
                       },
@@ -94,12 +194,15 @@
                         ],
                         "Resource": [
                           {
-                            "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cnj-processor-alt-v2-dev*:*:*"
+                            "Fn::Sub": "arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/cnj-processor-dev*:*:*"
                           }
                         ]
                       },
                       {
-                        "$ref": "$[\"service\"][\"provider\"][\"iamRoleStatements\"][0]"
+                        "$ref": "$[\"service\"][\"provider\"][\"iam\"][\"role\"][\"statements\"][0]"
+                      },
+                      {
+                        "$ref": "$[\"service\"][\"provider\"][\"iam\"][\"role\"][\"statements\"][1]"
                       },
                       {
                         "Effect": "Allow",
@@ -126,7 +229,7 @@
                 "Fn::Join": [
                   "-",
                   [
-                    "cnj-processor-alt-v2",
+                    "cnj-processor",
                     "dev",
                     {
                       "Ref": "AWS::Region"
@@ -137,21 +240,27 @@
               }
             }
           },
-          "ApiHandlerLambdaFunction": {
+          "ApiLambdaFunction": {
             "Type": "AWS::Lambda::Function",
             "Properties": {
               "Code": {
-                "S3Bucket": "serverless-framework-deployments-us-east-1-28d29ffe-7c99",
-                "S3Key": "serverless/cnj-processor-alt-v2/dev/1747321780157-2025-05-15T15:09:40.157Z/cnj-processor-alt-v2.zip"
+                "S3Bucket": {
+                  "Ref": "ServerlessDeploymentBucket"
+                },
+                "S3Key": "serverless/cnj-processor/dev/1747621338377-2025-05-19T02:22:18.377Z/cnj-processor.zip"
               },
-              "Handler": "interface/lambda_handler.lambda_handler",
-              "Runtime": "python3.12",
-              "FunctionName": "cnj-processor-alt-v2-dev-apiHandler",
+              "Handler": "protocol/lambda_handler.lambda_handler",
+              "Runtime": "python3.11",
+              "FunctionName": "cnj-processor-dev-api",
               "MemorySize": 1024,
               "Timeout": 6,
               "Environment": {
                 "Variables": {
-                  "DYNAMODB_TABLE": "cnjtable"
+                  "AUTH_TOKEN": "cDeh4bg9DxkMZuk5gPfDL2YuWFh2xUmPrUFoXiIrMSBcX24CG2K3bVmVfOqt57WD",
+                  "DYNAMODB_TABLE": "cnj",
+                  "QUEUE_URL": {
+                    "$ref": "$[\"service\"][\"provider\"][\"environment\"][\"QUEUE_URL\"]"
+                  }
                 }
               },
               "Role": {
@@ -162,24 +271,30 @@
               }
             },
             "DependsOn": [
-              "ApiHandlerLogGroup"
+              "ApiLogGroup"
             ]
           },
           "WorkerLambdaFunction": {
             "Type": "AWS::Lambda::Function",
             "Properties": {
               "Code": {
-                "S3Bucket": "serverless-framework-deployments-us-east-1-28d29ffe-7c99",
-                "S3Key": "serverless/cnj-processor-alt-v2/dev/1747321780157-2025-05-15T15:09:40.157Z/cnj-processor-alt-v2.zip"
+                "S3Bucket": {
+                  "Ref": "ServerlessDeploymentBucket"
+                },
+                "S3Key": "serverless/cnj-processor/dev/1747621338377-2025-05-19T02:22:18.377Z/cnj-processor.zip"
               },
-              "Handler": "interface/worker_lambda.lambda_handler",
-              "Runtime": "python3.12",
-              "FunctionName": "cnj-processor-alt-v2-dev-worker",
+              "Handler": "protocol/lambda_worker.lambda_worker",
+              "Runtime": "python3.11",
+              "FunctionName": "cnj-processor-dev-worker",
               "MemorySize": 1024,
               "Timeout": 6,
               "Environment": {
                 "Variables": {
-                  "DYNAMODB_TABLE": "cnjtable"
+                  "AUTH_TOKEN": "cDeh4bg9DxkMZuk5gPfDL2YuWFh2xUmPrUFoXiIrMSBcX24CG2K3bVmVfOqt57WD",
+                  "DYNAMODB_TABLE": "cnj",
+                  "QUEUE_URL": {
+                    "$ref": "$[\"service\"][\"provider\"][\"environment\"][\"QUEUE_URL\"]"
+                  }
                 }
               },
               "Role": {
@@ -193,192 +308,24 @@
               "WorkerLogGroup"
             ]
           },
-          "ApiHandlerLambdaVersionyrWblZ4dTACZNMv3PsDyB15Y2PlqU6IqCJcAYmsA": {
+          "ApiLambdaVersion4hhafQffPGjBK63g4Zf8RW3lpPG4FGjMMsibI7T7Y": {
             "Type": "AWS::Lambda::Version",
             "DeletionPolicy": "Retain",
             "Properties": {
               "FunctionName": {
-                "Ref": "ApiHandlerLambdaFunction"
+                "Ref": "ApiLambdaFunction"
               },
-              "CodeSha256": "JlXvTDAF780X6WFcuLFFj5A59wyRgODPhygouZo6o80="
+              "CodeSha256": "9JG6GQYwdgG0K6jtHQ4ZZN2FBlB3U81lsl6kIa0Dt0s="
             }
           },
-          "WorkerLambdaVersionrENaZoV4GJXVOxLJ7AX1jQNe2HBKnNIpvxzR0fGkI": {
+          "WorkerLambdaVersionszrnuaJC96oR0Kh5YGJRmGeI77JLV7rvbaBdfpwdNEE": {
             "Type": "AWS::Lambda::Version",
             "DeletionPolicy": "Retain",
             "Properties": {
               "FunctionName": {
                 "Ref": "WorkerLambdaFunction"
               },
-              "CodeSha256": "JlXvTDAF780X6WFcuLFFj5A59wyRgODPhygouZo6o80="
-            }
-          },
-          "ApiGatewayRestApi": {
-            "Type": "AWS::ApiGateway::RestApi",
-            "Properties": {
-              "Name": "dev-cnj-processor-alt-v2",
-              "EndpointConfiguration": {
-                "Types": [
-                  "EDGE"
-                ]
-              },
-              "Policy": ""
-            }
-          },
-          "ApiGatewayResourceProcessDashcnj": {
-            "Type": "AWS::ApiGateway::Resource",
-            "Properties": {
-              "ParentId": {
-                "Fn::GetAtt": [
-                  "ApiGatewayRestApi",
-                  "RootResourceId"
-                ]
-              },
-              "PathPart": "process-cnj",
-              "RestApiId": {
-                "Ref": "ApiGatewayRestApi"
-              }
-            }
-          },
-          "ApiGatewayMethodProcessDashcnjOptions": {
-            "Type": "AWS::ApiGateway::Method",
-            "Properties": {
-              "AuthorizationType": "NONE",
-              "HttpMethod": "OPTIONS",
-              "MethodResponses": [
-                {
-                  "StatusCode": "200",
-                  "ResponseParameters": {
-                    "method.response.header.Access-Control-Allow-Origin": true,
-                    "method.response.header.Access-Control-Allow-Headers": true,
-                    "method.response.header.Access-Control-Allow-Methods": true
-                  },
-                  "ResponseModels": {}
-                }
-              ],
-              "RequestParameters": {},
-              "Integration": {
-                "Type": "MOCK",
-                "RequestTemplates": {
-                  "application/json": "{statusCode:200}"
-                },
-                "ContentHandling": "CONVERT_TO_TEXT",
-                "IntegrationResponses": [
-                  {
-                    "StatusCode": "200",
-                    "ResponseParameters": {
-                      "method.response.header.Access-Control-Allow-Origin": "'*'",
-                      "method.response.header.Access-Control-Allow-Headers": "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent,X-Amzn-Trace-Id'",
-                      "method.response.header.Access-Control-Allow-Methods": "'OPTIONS,POST'"
-                    },
-                    "ResponseTemplates": {
-                      "application/json": ""
-                    }
-                  }
-                ]
-              },
-              "ResourceId": {
-                "Ref": "ApiGatewayResourceProcessDashcnj"
-              },
-              "RestApiId": {
-                "Ref": "ApiGatewayRestApi"
-              }
-            }
-          },
-          "ApiGatewayMethodProcessDashcnjPost": {
-            "Type": "AWS::ApiGateway::Method",
-            "Properties": {
-              "HttpMethod": "POST",
-              "RequestParameters": {},
-              "ResourceId": {
-                "Ref": "ApiGatewayResourceProcessDashcnj"
-              },
-              "RestApiId": {
-                "Ref": "ApiGatewayRestApi"
-              },
-              "ApiKeyRequired": false,
-              "AuthorizationType": "NONE",
-              "Integration": {
-                "IntegrationHttpMethod": "POST",
-                "Type": "AWS_PROXY",
-                "Uri": {
-                  "Fn::Join": [
-                    "",
-                    [
-                      "arn:",
-                      {
-                        "Ref": "AWS::Partition"
-                      },
-                      ":apigateway:",
-                      {
-                        "Ref": "AWS::Region"
-                      },
-                      ":lambda:path/2015-03-31/functions/",
-                      {
-                        "Fn::GetAtt": [
-                          "ApiHandlerLambdaFunction",
-                          "Arn"
-                        ]
-                      },
-                      "/invocations"
-                    ]
-                  ]
-                }
-              },
-              "MethodResponses": []
-            },
-            "DependsOn": [
-              "ApiHandlerLambdaPermissionApiGateway"
-            ]
-          },
-          "ApiGatewayDeployment1747321762039": {
-            "Type": "AWS::ApiGateway::Deployment",
-            "Properties": {
-              "RestApiId": {
-                "Ref": "ApiGatewayRestApi"
-              },
-              "StageName": "dev"
-            },
-            "DependsOn": [
-              "ApiGatewayMethodProcessDashcnjOptions",
-              "ApiGatewayMethodProcessDashcnjPost"
-            ]
-          },
-          "ApiHandlerLambdaPermissionApiGateway": {
-            "Type": "AWS::Lambda::Permission",
-            "Properties": {
-              "FunctionName": {
-                "Fn::GetAtt": [
-                  "ApiHandlerLambdaFunction",
-                  "Arn"
-                ]
-              },
-              "Action": "lambda:InvokeFunction",
-              "Principal": "apigateway.amazonaws.com",
-              "SourceArn": {
-                "Fn::Join": [
-                  "",
-                  [
-                    "arn:",
-                    {
-                      "Ref": "AWS::Partition"
-                    },
-                    ":execute-api:",
-                    {
-                      "Ref": "AWS::Region"
-                    },
-                    ":",
-                    {
-                      "Ref": "AWS::AccountId"
-                    },
-                    ":",
-                    {
-                      "Ref": "ApiGatewayRestApi"
-                    },
-                    "/*/*"
-                  ]
-                ]
-              }
+              "CodeSha256": "9JG6GQYwdgG0K6jtHQ4ZZN2FBlB3U81lsl6kIa0Dt0s="
             }
           },
           "WorkerEventSourceMappingSQSCnjQueue": {
@@ -403,16 +350,108 @@
               "Enabled": true
             }
           },
+          "HttpApi": {
+            "Type": "AWS::ApiGatewayV2::Api",
+            "Properties": {
+              "Name": "dev-cnj-processor",
+              "ProtocolType": "HTTP"
+            }
+          },
+          "HttpApiStage": {
+            "Type": "AWS::ApiGatewayV2::Stage",
+            "Properties": {
+              "ApiId": {
+                "Ref": "HttpApi"
+              },
+              "StageName": "$default",
+              "AutoDeploy": true,
+              "DefaultRouteSettings": {
+                "DetailedMetricsEnabled": false
+              }
+            }
+          },
+          "ApiLambdaPermissionHttpApi": {
+            "Type": "AWS::Lambda::Permission",
+            "Properties": {
+              "FunctionName": {
+                "Fn::GetAtt": [
+                  "ApiLambdaFunction",
+                  "Arn"
+                ]
+              },
+              "Action": "lambda:InvokeFunction",
+              "Principal": "apigateway.amazonaws.com",
+              "SourceArn": {
+                "Fn::Join": [
+                  "",
+                  [
+                    "arn:",
+                    {
+                      "Ref": "AWS::Partition"
+                    },
+                    ":execute-api:",
+                    {
+                      "Ref": "AWS::Region"
+                    },
+                    ":",
+                    {
+                      "Ref": "AWS::AccountId"
+                    },
+                    ":",
+                    {
+                      "Ref": "HttpApi"
+                    },
+                    "/*"
+                  ]
+                ]
+              }
+            }
+          },
+          "HttpApiIntegrationApi": {
+            "Type": "AWS::ApiGatewayV2::Integration",
+            "Properties": {
+              "ApiId": {
+                "Ref": "HttpApi"
+              },
+              "IntegrationType": "AWS_PROXY",
+              "IntegrationUri": {
+                "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"ApiLambdaPermissionHttpApi\"][\"Properties\"][\"FunctionName\"]"
+              },
+              "PayloadFormatVersion": "2.0",
+              "TimeoutInMillis": 30000
+            }
+          },
+          "HttpApiRoutePostProcess": {
+            "Type": "AWS::ApiGatewayV2::Route",
+            "Properties": {
+              "ApiId": {
+                "Ref": "HttpApi"
+              },
+              "RouteKey": "POST /process",
+              "Target": {
+                "Fn::Join": [
+                  "/",
+                  [
+                    "integrations",
+                    {
+                      "Ref": "HttpApiIntegrationApi"
+                    }
+                  ]
+                ]
+              }
+            },
+            "DependsOn": "HttpApiIntegrationApi"
+          },
           "CnjQueue": {
             "Type": "AWS::SQS::Queue",
             "Properties": {
-              "QueueName": "cnj-queue"
+              "QueueName": "cnj-queue-dev"
             }
           },
-          "cnjtable": {
+          "CnjTable": {
             "Type": "AWS::DynamoDB::Table",
             "Properties": {
-              "TableName": "cnjtable",
+              "TableName": "cnj",
               "AttributeDefinitions": [
                 {
                   "AttributeName": "cnj",
@@ -431,38 +470,49 @@
         },
         "Outputs": {
           "ServerlessDeploymentBucketName": {
-            "Value": "serverless-framework-deployments-us-east-1-28d29ffe-7c99",
-            "Export": {
-              "Name": "sls-cnj-processor-alt-v2-dev-ServerlessDeploymentBucketName"
-            }
-          },
-          "ApiHandlerLambdaFunctionQualifiedArn": {
-            "Description": "Current Lambda function version",
             "Value": {
-              "Ref": "ApiHandlerLambdaVersionyrWblZ4dTACZNMv3PsDyB15Y2PlqU6IqCJcAYmsA"
+              "Ref": "ServerlessDeploymentBucket"
             },
             "Export": {
-              "Name": "sls-cnj-processor-alt-v2-dev-ApiHandlerLambdaFunctionQualifiedArn"
+              "Name": "sls-cnj-processor-dev-ServerlessDeploymentBucketName"
+            }
+          },
+          "ApiLambdaFunctionQualifiedArn": {
+            "Description": "Current Lambda function version",
+            "Value": {
+              "Ref": "ApiLambdaVersion4hhafQffPGjBK63g4Zf8RW3lpPG4FGjMMsibI7T7Y"
+            },
+            "Export": {
+              "Name": "sls-cnj-processor-dev-ApiLambdaFunctionQualifiedArn"
             }
           },
           "WorkerLambdaFunctionQualifiedArn": {
             "Description": "Current Lambda function version",
             "Value": {
-              "Ref": "WorkerLambdaVersionrENaZoV4GJXVOxLJ7AX1jQNe2HBKnNIpvxzR0fGkI"
+              "Ref": "WorkerLambdaVersionszrnuaJC96oR0Kh5YGJRmGeI77JLV7rvbaBdfpwdNEE"
             },
             "Export": {
-              "Name": "sls-cnj-processor-alt-v2-dev-WorkerLambdaFunctionQualifiedArn"
+              "Name": "sls-cnj-processor-dev-WorkerLambdaFunctionQualifiedArn"
             }
           },
-          "ServiceEndpoint": {
-            "Description": "URL of the service endpoint",
+          "HttpApiId": {
+            "Description": "Id of the HTTP API",
+            "Value": {
+              "Ref": "HttpApi"
+            },
+            "Export": {
+              "Name": "sls-cnj-processor-dev-HttpApiId"
+            }
+          },
+          "HttpApiUrl": {
+            "Description": "URL of the HTTP API",
             "Value": {
               "Fn::Join": [
                 "",
                 [
                   "https://",
                   {
-                    "Ref": "ApiGatewayRestApi"
+                    "Ref": "HttpApi"
                   },
                   ".execute-api.",
                   {
@@ -471,75 +521,148 @@
                   ".",
                   {
                     "Ref": "AWS::URLSuffix"
-                  },
-                  "/dev"
+                  }
                 ]
               ]
             },
             "Export": {
-              "Name": "sls-cnj-processor-alt-v2-dev-ServiceEndpoint"
+              "Name": "sls-cnj-processor-dev-HttpApiUrl"
+            }
+          }
+        }
+      },
+      "coreCloudFormationTemplate": {
+        "AWSTemplateFormatVersion": "2010-09-09",
+        "Description": "The AWS CloudFormation template for this Serverless application",
+        "Resources": {
+          "ServerlessDeploymentBucket": {
+            "Type": "AWS::S3::Bucket",
+            "Properties": {
+              "BucketEncryption": {
+                "ServerSideEncryptionConfiguration": [
+                  {
+                    "ServerSideEncryptionByDefault": {
+                      "SSEAlgorithm": "AES256"
+                    }
+                  }
+                ]
+              }
+            }
+          },
+          "ServerlessDeploymentBucketPolicy": {
+            "Type": "AWS::S3::BucketPolicy",
+            "Properties": {
+              "Bucket": {
+                "Ref": "ServerlessDeploymentBucket"
+              },
+              "PolicyDocument": {
+                "Statement": [
+                  {
+                    "Action": "s3:*",
+                    "Effect": "Deny",
+                    "Principal": "*",
+                    "Resource": [
+                      {
+                        "Fn::Join": [
+                          "",
+                          [
+                            "arn:",
+                            {
+                              "Ref": "AWS::Partition"
+                            },
+                            ":s3:::",
+                            {
+                              "Ref": "ServerlessDeploymentBucket"
+                            },
+                            "/*"
+                          ]
+                        ]
+                      },
+                      {
+                        "Fn::Join": [
+                          "",
+                          [
+                            "arn:",
+                            {
+                              "Ref": "AWS::Partition"
+                            },
+                            ":s3:::",
+                            {
+                              "Ref": "ServerlessDeploymentBucket"
+                            }
+                          ]
+                        ]
+                      }
+                    ],
+                    "Condition": {
+                      "Bool": {
+                        "aws:SecureTransport": false
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "Outputs": {
+          "ServerlessDeploymentBucketName": {
+            "Value": {
+              "Ref": "ServerlessDeploymentBucket"
             }
           }
         }
       },
       "vpc": {}
     },
+    "custom": {
+      "pythonRequirements": {
+        "dockerizePip": true
+      }
+    },
+    "plugins": [
+      "serverless-python-requirements"
+    ],
     "pluginsData": {},
     "functions": {
-      "apiHandler": {
-        "handler": "interface/lambda_handler.lambda_handler",
+      "api": {
+        "handler": "protocol/lambda_handler.lambda_handler",
         "events": [
           {
-            "http": {
-              "path": "process-cnj",
-              "method": "post",
-              "cors": {
-                "origin": "*",
-                "methods": [
-                  "OPTIONS",
-                  "POST"
-                ],
-                "headers": [
-                  "Content-Type",
-                  "X-Amz-Date",
-                  "Authorization",
-                  "X-Api-Key",
-                  "X-Amz-Security-Token",
-                  "X-Amz-User-Agent",
-                  "X-Amzn-Trace-Id"
-                ],
-                "allowCredentials": false
-              },
-              "integration": "AWS_PROXY"
-            }
+            "httpApi": {
+              "path": "/process",
+              "method": "post"
+            },
+            "resolvedMethod": "POST",
+            "resolvedPath": "/process"
           }
         ],
-        "name": "cnj-processor-alt-v2-dev-apiHandler",
+        "name": "cnj-processor-dev-api",
         "package": {},
         "memory": 1024,
         "timeout": 6,
-        "runtime": "python3.12",
+        "runtime": "python3.11",
         "vpc": {},
-        "versionLogicalId": "ApiHandlerLambdaVersionyrWblZ4dTACZNMv3PsDyB15Y2PlqU6IqCJcAYmsA"
+        "versionLogicalId": "ApiLambdaVersion4hhafQffPGjBK63g4Zf8RW3lpPG4FGjMMsibI7T7Y"
       },
       "worker": {
-        "handler": "interface/worker_lambda.lambda_handler",
+        "handler": "protocol/lambda_worker.lambda_worker",
         "events": [
           {
             "sqs": {
               "arn": {
-                "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"IamRoleLambdaExecution\"][\"Properties\"][\"Policies\"][0][\"PolicyDocument\"][\"Statement\"][3][\"Resource\"][0]"
+                "$ref": "$[\"service\"][\"provider\"][\"compiledCloudFormationTemplate\"][\"Resources\"][\"IamRoleLambdaExecution\"][\"Properties\"][\"Policies\"][0][\"PolicyDocument\"][\"Statement\"][4][\"Resource\"][0]"
               }
             }
           }
         ],
-        "name": "cnj-processor-alt-v2-dev-worker",
+        "name": "cnj-processor-dev-worker",
         "package": {},
         "memory": 1024,
         "timeout": 6,
-        "runtime": "python3.12",
+        "runtime": "python3.11",
         "vpc": {},
-        "versionLogicalId": "WorkerLambdaVersionrENaZoV4GJXVOxLJ7AX1jQNe2HBKnNIpvxzR0fGkI"
+        "versionLogicalId": "WorkerLambdaVersionszrnuaJC96oR0Kh5YGJRmGeI77JLV7rvbaBdfpwdNEE"
       }
     },
     "resources": {
@@ -547,13 +670,13 @@
         "CnjQueue": {
           "Type": "AWS::SQS::Queue",
           "Properties": {
-            "QueueName": "cnj-queue"
+            "QueueName": "cnj-queue-dev"
           }
         },
-        "cnjtable": {
+        "CnjTable": {
           "Type": "AWS::DynamoDB::Table",
           "Properties": {
-            "TableName": "cnjtable",
+            "TableName": "cnj",
             "AttributeDefinitions": [
               {
                 "AttributeName": "cnj",
@@ -573,9 +696,10 @@
       "Outputs": {}
     },
     "configValidationMode": "warn",
-    "serviceFilename": "serverless",
+    "serviceFilename": "serverless.yml",
     "initialServerlessConfig": {
-      "service": "cnj-processor-alt-v2",
+      "service": "cnj-processor",
+      "frameworkVersion": "3",
       "provider": {
         "$ref": "$[\"service\"][\"provider\"]"
       },
@@ -584,15 +708,20 @@
       },
       "resources": {
         "$ref": "$[\"service\"][\"resources\"]"
+      },
+      "plugins": {
+        "$ref": "$[\"service\"][\"plugins\"]"
+      },
+      "custom": {
+        "$ref": "$[\"service\"][\"custom\"]"
       }
     },
-    "appId": null,
-    "orgId": null,
     "layers": {},
-    "artifact": "C:\\Users\\samar\\OneDrive\\Documentos\\Sasu\\Estudo\\bt_tech\\.serverless\\cnj-processor-alt-v2.zip"
+    "isDashboardMonitoringPreconfigured": false,
+    "artifact": "c:\\bt_tech\\cnj-processor\\.serverless\\cnj-processor.zip"
   },
   "package": {
-    "artifactDirectoryName": "serverless/cnj-processor-alt-v2/dev/1747321780157-2025-05-15T15:09:40.157Z",
-    "artifact": "cnj-processor-alt-v2.zip"
+    "artifactDirectoryName": "serverless/cnj-processor/dev/1747621338377-2025-05-19T02:22:18.377Z",
+    "artifact": "cnj-processor.zip"
   }
 }

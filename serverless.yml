@@ -1,29 +1,49 @@
-service: cnj-processor-alt-v2
+service: cnj-processor
+
+frameworkVersion: '3'
 
 provider:
   name: aws
-  profile: cnj-profile
-  runtime: python3.12
+  runtime: python3.11
+  stage: dev
   region: us-east-1
+  profile: cnj-profile
   environment:
-    DYNAMODB_TABLE: cnjtable
-  iamRoleStatements:
-    - Effect: Allow
-      Action:
-        - dynamodb:PutItem
-        - sqs:SendMessage
-      Resource: "*"
+    AUTH_TOKEN: cDeh4bg9DxkMZuk5gPfDL2YuWFh2xUmPrUFoXiIrMSBcX24CG2K3bVmVfOqt57WD
+    DYNAMODB_TABLE: cnj
+    QUEUE_URL:
+      Fn::GetAtt:
+        - CnjQueue
+        - QueueUrl
+
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - sqs:SendMessage
+          Resource:
+            - Fn::GetAtt:
+                - CnjQueue
+                - Arn
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+          Resource:
+            - Fn::GetAtt:
+                - CnjTable
+                - Arn
 
 functions:
-  apiHandler:
-    handler: interface/lambda_handler.lambda_handler
+  api:
+    handler: protocol/lambda_handler.lambda_handler
     events:
-      - http:
-          path: process-cnj
+      - httpApi:
+          path: /process
           method: post
-          cors: true
+
   worker:
-    handler: interface/worker_lambda.lambda_handler
+    handler: protocol/lambda_worker.lambda_worker
     events:
       - sqs:
           arn:
@@ -36,11 +56,12 @@ resources:
     CnjQueue:
       Type: AWS::SQS::Queue
       Properties:
-        QueueName: cnj-queue
-    cnjtable:
+        QueueName: cnj-queue-${sls:stage}
+
+    CnjTable:
       Type: AWS::DynamoDB::Table
       Properties:
-        TableName: cnjtable
+        TableName: cnj
         AttributeDefinitions:
           - AttributeName: cnj
             AttributeType: S
@@ -49,34 +70,9 @@ resources:
             KeyType: HASH
         BillingMode: PAY_PER_REQUEST
 
-resources:
-  Resources:
-    CnjUserPool:
-      Type: AWS::Cognito::UserPool
-      Properties:
-        UserPoolName: cnj-user-pool
-        AutoVerifiedAttributes:
-          - email
+plugins:
+  - serverless-python-requirements
 
-    CnjUserPoolClient:
-      Type: AWS::Cognito::UserPoolClient
-      Properties:
-        ClientName: cnj-client
-        UserPoolId:
-          Ref: CnjUserPool
-        GenerateSecret: false
-        ExplicitAuthFlows:
-          - ADMIN_NO_SRP_AUTH
-          - ALLOW_REFRESH_TOKEN_AUTH
-          - ALLOW_USER_PASSWORD_AUTH
-
-    ApiGatewayAuthorizer:
-      Type: AWS::ApiGateway::Authorizer
-      Properties:
-        Name: cognito-authorizer
-        Type: COGNITO_USER_POOLS
-        IdentitySource: method.request.header.Authorization
-        RestApiId:
-          Ref: ApiGatewayRestApi
-        ProviderARNs:
-          - Fn::GetAtt: [CnjUserPool, Arn]
+custom:
+  pythonRequirements:
+    dockerizePip: true

@@ -9,6 +9,16 @@ QUEUE_URL = 'https://sqs.us-east-1.amazonaws.com/086266612675/cnj-queue'
 
 
 def lambda_handler(event, context):
+    headers = event.get('headers', {})
+    auth_header = headers.get('Authorization', '')
+    expected_token = os.environ.get('AUTH_TOKEN')
+
+    if not auth_header.startswith('Bearer ') or auth_header.split(' ')[1] != expected_token:
+        return {
+            'statusCode': 401,
+            'body': json.dumps({'error': 'Unauthorized'})
+        }
+        
     body = json.loads(event['body'])
     cnj = body.get('cnj')
 
